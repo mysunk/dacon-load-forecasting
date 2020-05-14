@@ -37,21 +37,20 @@ class Tuning_model(object):
     def lgb_space(self):
         # LightGBM parameters
         self.space = {
-            'learning_rate':            hp.uniform('learning_rate',    0.01, 0.3),
+            'learning_rate':            hp.uniform('learning_rate',    0.01, 0.1),
             'max_depth':                -1,
-            'num_leaves':               hp.quniform('num_leaves',       30, 300, 1), 
-            'min_data_in_leaf':		    hp.quniform('min_data_in_leaf',	50, 300, 1),	# overfitting 안되려면 높은 값
-            'reg_alpha':                hp.uniform('reg_alpha',0,1),
-            'reg_lambda':               hp.uniform('reg_lambda',0, 1),
-            'min_child_weight':         hp.quniform('min_child_weight', 1, 30, 1),
-            'colsample_bytree':         hp.uniform('colsample_bytree', 0.01, 1.0),
-            'colsample_bynode':		    hp.uniform('colsample_bynode',0.01,1.0),
-            'bagging_freq':			    hp.quniform('bagging_freq',	1,30,1),
+            'num_leaves':               hp.quniform('num_leaves',       5, 100, 1), 
+            'min_data_in_leaf':		    hp.quniform('min_data_in_leaf',	10, 100, 1),	# overfitting 안되려면 높은 값
+            'reg_alpha':                hp.uniform('reg_alpha',0,0.5),
+            'reg_lambda':               hp.uniform('reg_lambda',0, 0.5),
+            'colsample_bytree':         hp.uniform('colsample_bytree', 0.8, 1.0),
+            'colsample_bynode':		    hp.uniform('colsample_bynode',0.8,1.0),
+            'bagging_freq':			    hp.quniform('bagging_freq',	1,20,1),
             'tree_learner':			    hp.choice('tree_learner',	['serial','feature','data','voting']),
-            'subsample':                hp.uniform('subsample', 0.01, 1.0),
-            'boosting':			        hp.choice('boosting', ['gbdt','rf']),
-            'max_bin':			        hp.quniform('max_bin',		3,100,1), # overfitting 안되려면 낮은 값
-            "min_sum_hessian_in_leaf": hp.quniform('min_sum_hessian_in_leaf',       5, 30, 1), 
+            'subsample':                hp.uniform('subsample', 0.8, 1.0),
+            'boosting':			        hp.choice('boosting', ['gbdt']),
+            'max_bin':			        hp.quniform('max_bin',		100,300,1), # overfitting 안되려면 낮은 값
+            "min_sum_hessian_in_leaf": hp.uniform('min_sum_hessian_in_leaf',       0, 0.1), 
             'random_state':             self.random_state,
             'n_jobs':                   -1,
             'metrics':                  'l1'
@@ -73,7 +72,7 @@ class Tuning_model(object):
     # objective function
     def lgb_val(self, params, train_set, past): 
         params = make_param_int(params, ['max_depth','num_leaves','min_data_in_leaf',
-                                     'min_child_weight','bagging_freq','max_bin','min_sum_hessian_in_leaf'])
+                                     'bagging_freq','max_bin'])
         
         losses = []
         for future in range(7, 35):
@@ -104,9 +103,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     # load dataset
-    target = pd.read_csv('data/target_wo_DFT.csv')
-    target['year'] = target['date'].dt.year
-    # x_columns, y_columns =  target.columns[4:], ['supply']
+    target = pd.read_csv('data/target.csv')
     label = args.save_file[8:]
     x_columns, y_columns =  target.columns[4:], [label]
     

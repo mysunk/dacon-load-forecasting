@@ -136,7 +136,6 @@ x_test = x_test.reshape(1,-1)
 x_columns, y_columns =  target.columns[4:], ['temp_mean', 'temp_min','temp_max','supply']
 losses = np.zeros((28, len(y_columns)))
 for i, y_column in enumerate(y_columns):
-    y_column = 'supply'
     trials = load_obj('0513/result1_'+y_column)
     param = trials[0]['params']
     models = []
@@ -215,8 +214,8 @@ submission = pd.concat([submission, submission_bottom_half], axis = 0)
 submission.to_csv('submit/submit_5.csv', index=False)
 
 #%% 결과 확인
-submit_4 = pd.read_csv('submit/submit_4.csv')
-y_true = submit_4.iloc[:28,1:].values
-submit_5 = pd.read_csv('submit/submit_5.csv')
-y_pred = submit_5.iloc[:28,1:].values
+submit_1 = pd.read_csv('submit/submit_5.csv')
+y_true = submit_1.iloc[:28,1:].values
+submit_2 = pd.read_csv('submit/submit_6.csv')
+y_pred = submit_2.iloc[:28,1:].values
 rmsse(y_true, y_pred, target.loc[:,'smp_max':'supply'].values, axis = 0, weight = [0.1, 0.1, 0.2, 0.6])
