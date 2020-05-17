@@ -63,8 +63,8 @@ for i, area in enumerate(weather['area'].unique()):
             new_f.append(str(area)+'_' + j)
     weather_list[i].columns = new_f
 
-del weather_list[1:37] # 0, 37, 38만 남김
-# weather_list = weather_list[0]
+del weather_list[4:] # 0, 37, 38만 남김
+# weather_list = [weather_list[0]]
 
 # hourly
 start = '2018-02-01'
@@ -77,10 +77,16 @@ for d in weather_list:
     hourly_weather  = hourly_weather.merge(d, how='outer')
 
 # 같은 feature별로 median 구함
-a = len(features)-1
-for i in range(a):
-    hourly_weather[features[1+i]] = hourly_weather.iloc[:,[i+1,i+1+a,i+1+2*a]].median(axis=1)
-hourly_weather = hourly_weather.drop(columns = hourly_weather.columns[1:-1*a])
+if len(weather_list) == 1:
+    a = len(features)-1
+    for i in range(a):
+        hourly_weather[features[1+i]] = hourly_weather.iloc[:,i+1]
+    hourly_weather = hourly_weather.drop(columns = hourly_weather.columns[1:-1])
+else: # 3개 지역
+    a = len(features)-1
+    for i in range(a):
+        hourly_weather[features[1+i]] = hourly_weather.iloc[:,[i+1,i+1+a,i+1+2*a, i+1+3*a]].median(axis=1)
+    hourly_weather = hourly_weather.drop(columns = hourly_weather.columns[1:-1*a])
 
 # 결측치 처리 -- 바로 다음값으로 바꿈
 for nums,i in enumerate(hourly_weather.columns):
@@ -108,14 +114,14 @@ for i in hourly_weather.columns[1:]:
     target[i+'_min'] = daily_weather.loc[:,i+'_h0':i+'_h23'].min(axis=1)
     target[i+'_mean'] = daily_weather.loc[:,i+'_h0':i+'_h23'].mean(axis=1)
     # target[i+'_std'] = daily_weather.loc[:,i+'_h0':i+'_h23'].std(axis=1)
-    
+
 
 #%% target 저장
-# target.to_csv('data/target.csv',index=False)
+target.to_csv('data/target.csv',index=False)
 # target.to_csv('data/target_year_included.csv',index=False)
 
 #%% 28일간 예측
-past = 30
+past = 28
 past = past -1
 
 submission = pd.read_csv('data_raw/sample_submission.csv')
@@ -132,48 +138,84 @@ test['dayofweek'] = test['date'].dt.dayofweek
 x_test = np.array(target.loc[target.shape[0]-past-1:, target.columns[4:]])
 x_test = x_test.reshape(1,-1)
 
-#%% 온도만으로 전력수급 예측하기 -- lgb, time series
-x_columns, y_columns =  target.columns[4:], ['temp_mean', 'temp_min','temp_max','supply']
-losses = np.zeros((28, len(y_columns)))
+#%% 온도만으로 전력수급 예측하기 -- lgb, time series -- loss 확인용
+# x_columns, y_columns =  target.columns[4:], ['supply','temp_mean', 'temp_min','temp_max']
+# losses = np.zeros((28, len(y_columns)))
+# random_states = []
+# for random_state in range(10):
+#     for i, y_column in enumerate(y_columns):
+#         if y_column == 'supply':
+#             trials = load_obj('0513/result1_supply')
+#             param = trials[0]['params']
+#         else:
+#             trials = load_obj('0513/result1_'+y_column)
+#             param = trials[0]['params']
+#         # param = {
+#         # 'metric': 'l1',
+#         # 'seed':7777
+#         # }
+        
+#         param['random_state'] = random_state
+#         # model 만들기
+#         for future in range(7, 35):
+#         # for future in [7]:
+#             train_split = target.shape[0]-past-future-28 # 마지막 30일을 validation set으로 사용
+#             x_train, y_train = trans(target, 0, train_split, past, future, x_columns, y_column)
+#             x_val, y_val = trans(target, train_split, None, past, future, x_columns, y_column)
+#             y_train = np.ravel(y_train)
+#             y_val = np.ravel(y_val)
+#             d_train = lgb.Dataset(x_train,label=y_train)
+#             d_val = lgb.Dataset(x_val,label=y_val)
+#             model = lgb.train(param, train_set = d_train,  
+#                           valid_sets=[d_train, d_val],num_boost_round=1000,verbose_eval=False,
+#                                   early_stopping_rounds=10)
+            
+#             y_pred = model.predict(x_val)
+#             loss = model.best_score['valid_1']['l1']
+#             losses[future-7,i] = loss
+#         break
+#     print(f'for {random_state}, {np.mean(losses, axis=0)}')
+        
+    
+#%% 온도만으로 전력수급 예측하기 -- lgb, time series -- 예측용
+x_columns, y_columns =  target.columns[4:], ['supply','temp_mean', 'temp_min','temp_max']
 for i, y_column in enumerate(y_columns):
-    trials = load_obj('0513/result1_'+y_column)
-    param = trials[0]['params']
-    models = []
+    pred_all = []
+    for random_state in range(10):
+        trials = load_obj('0513/result1_'+y_column)
+        param = trials[0]['params']
+        # param = {
+        # 'metric': 'l1',
+        # 'seed':777
+        # }
+        models = []
+        param['random_state'] = random_state
+        # model 만들기
+        for future in range(7, 35):
+            x_train, y_train = trans(target, 0, None, past, future, x_columns, y_column)
+            y_train = np.ravel(y_train)
+            d_train = lgb.Dataset(x_train,label=y_train)
+            model = lgb.train(param, train_set = d_train,  
+                          valid_sets=[d_train],num_boost_round=1000,verbose_eval=False,
+                                  early_stopping_rounds=10)
+            models.append(model)
+        
+        preds = []
+        for future in range(7, 35):
+            preds.append(models[future-7].predict(x_test))
+        preds = np.concatenate(preds,axis=0)
+        pred_all.append(preds)
+    test[y_column] = np.mean(pred_all, axis=0)
     
-    # model 만들기
-    for future in range(7, 35):
-        train_split = target.shape[0]-past-future-30 # 마지막 30일을 validation set으로 사용
-        x_train, y_train = trans(target, 0, train_split, past, future, x_columns, y_column)
-        x_val, y_val = trans(target, train_split, None, past, future, x_columns, y_column)
-        y_train = np.ravel(y_train)
-        y_val = np.ravel(y_val)
-        d_train = lgb.Dataset(x_train,label=y_train)
-        d_val = lgb.Dataset(x_val,label=y_val)
-        model = lgb.train(param, train_set = d_train,  
-                      valid_sets=[d_train, d_val],num_boost_round=1000,verbose_eval=False,
-                             early_stopping_rounds=10)
-        loss = model.best_score['valid_1']['l1']
-        losses[future-7,i] = loss
-        models.append(model)
-    
-    preds = []
-    for future in range(7, 35):
-        preds.append(models[future-7].predict(x_test))
-    preds = np.concatenate(preds,axis=0)
-    
-    test[y_column] = preds
-
-
-#%% 온도와 전력수급으로 smp 예측하기 -- lgb
+#%% 온도와 전력수급으로 smp 예측하기
 train = target.loc[:,'supply':]
 y_columns = ['smp_max','smp_min','smp_mean']
 test_x = test.loc[:,'supply':]
-"""
+
 params = {
     'metric': 'mse',
     'seed':777
     }
-"""
 
 nfolds = 10
 losses = np.zeros((nfolds,len(y_columns)))
@@ -181,41 +223,32 @@ random_states = range(10)
 for j,y_column in enumerate(y_columns):
     pred_all = []
     for state in random_states:
-        trials = load_obj('0515/'+y_column)
-        params = trials[0]['params']
+        # trials = load_obj('0515/'+y_column)
+        # params = trials[0]['params']
         train_label = target.loc[:,y_column]
         preds = []
         kf = KFold(n_splits=nfolds,random_state=None, shuffle=True)
         for i, (train_index, test_index) in enumerate(kf.split(train, train_label)):
-            if isinstance(train, (np.ndarray, np.generic) ): # if numpy array
-                x_train = train[train_index]
-                y_train = train_label[train_index]
-                x_test = train[test_index]
-                y_test = train_label[test_index]
-            else: # if dataframe
-                x_train = train.iloc[train_index]
-                y_train = train_label.iloc[train_index]
-                x_test = train.iloc[test_index]
-                y_test = train_label.iloc[test_index]
+            x_train = train.iloc[train_index]
+            y_train = train_label.iloc[train_index]
+            x_test = train.iloc[test_index]
+            y_test = train_label.iloc[test_index]
+            
             dtrain = lgb.Dataset(x_train, label=y_train)
             dvalid = lgb.Dataset(x_test, label=y_test)
             model = lgb.train(params, train_set = dtrain,  
                               valid_sets=[dtrain, dvalid],num_boost_round=1000,verbose_eval=False,
                                      early_stopping_rounds=10)
-            losses[i,j] = model.best_score['valid_1']['l2']
+            loss = model.best_score['valid_1']['l2']
+            losses[i,j] = loss
+            
             pred = model.predict(test_x)
             preds.append(pred)
         pred_all.append(np.mean(preds,axis=0))
     test[y_column] = np.mean(pred_all,axis=0)
 
+
 #%% 최종 제출
 submission.loc[:, ['smp_min', 'smp_max', 'smp_mean', 'supply']] = test.loc[:,['smp_min', 'smp_max', 'smp_mean', 'supply']]
 submission = pd.concat([submission, submission_bottom_half], axis = 0)
-submission.to_csv('submit/submit_5.csv', index=False)
-
-#%% 결과 확인
-submit_1 = pd.read_csv('submit/submit_5.csv')
-y_true = submit_1.iloc[:28,1:].values
-submit_2 = pd.read_csv('submit/submit_6.csv')
-y_pred = submit_2.iloc[:28,1:].values
-rmsse(y_true, y_pred, target.loc[:,'smp_max':'supply'].values, axis = 0, weight = [0.1, 0.1, 0.2, 0.6])
+submission.to_csv('submit/submit_17.csv', index=False)

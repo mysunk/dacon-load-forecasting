@@ -39,15 +39,15 @@ class Tuning_model(object):
         self.space = {
             'learning_rate':            hp.uniform('learning_rate',    0.01, 0.1),
             'max_depth':                -1,
-            'num_leaves':               hp.quniform('num_leaves',       5, 100, 1), 
-            'min_data_in_leaf':		    hp.quniform('min_data_in_leaf',	10, 100, 1),	# overfitting 안되려면 높은 값
-            'reg_alpha':                hp.uniform('reg_alpha',0,0.5),
-            'reg_lambda':               hp.uniform('reg_lambda',0, 0.5),
-            'colsample_bytree':         hp.uniform('colsample_bytree', 0.8, 1.0),
-            'colsample_bynode':		    hp.uniform('colsample_bynode',0.8,1.0),
+            'num_leaves':               hp.quniform('num_leaves',       5, 200, 1), 
+            'min_data_in_leaf':		    hp.quniform('min_data_in_leaf',	10, 200, 1),	# overfitting 안되려면 높은 값
+            'reg_alpha':                hp.uniform('reg_alpha',0,1),
+            'reg_lambda':               hp.uniform('reg_lambda',0, 1),
+            'colsample_bytree':         hp.uniform('colsample_bytree', 0, 1.0),
+            'colsample_bynode':		    hp.uniform('colsample_bynode',0,1.0),
             'bagging_freq':			    hp.quniform('bagging_freq',	1,20,1),
             'tree_learner':			    hp.choice('tree_learner',	['serial','feature','data','voting']),
-            'subsample':                hp.uniform('subsample', 0.8, 1.0),
+            'subsample':                hp.uniform('subsample', 0, 1.0),
             'boosting':			        hp.choice('boosting', ['gbdt']),
             'max_bin':			        hp.quniform('max_bin',		100,300,1), # overfitting 안되려면 낮은 값
             "min_sum_hessian_in_leaf": hp.uniform('min_sum_hessian_in_leaf',       0, 0.1), 
@@ -76,9 +76,15 @@ class Tuning_model(object):
 
         losses_n = []
         past_n = past-1
-        val_num_n = 32
+        val_num_n = 28
         losses_n = []
         workday = [0,1,2,3,4]
+        # params = {
+        #     'metric': 'mae',
+        #     'seed':777
+        #     }
+        trials = load_obj('0517_com/nw')
+        params = trials[0]['params']
         
         for j in range(1,9): # 8개
             # NW
@@ -90,7 +96,7 @@ class Tuning_model(object):
             y_val = np.ravel(y_val)
             d_train = lgb.Dataset(x_train,label=y_train)
             d_val = lgb.Dataset(x_val,label=y_val)
-            model = lgb.train(param, train_set = d_train,  
+            model = lgb.train(params, train_set = d_train,  
                           valid_sets=[d_train, d_val],num_boost_round=1000,verbose_eval=False,
                                  early_stopping_rounds=10)
             loss = model.best_score['valid_1']['l1']
@@ -105,9 +111,9 @@ if __name__ == '__main__':
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--method', default='lgb', choices=['lgb', 'eln', 'rf','svr'])
     parser.add_argument('--max_evals', default=100,type=int)
-    parser.add_argument('--save_file', default='tmp')
+    parser.add_argument('--save_file', default='0517_com/nw')
     parser.add_argument('--label', default='supply')
-    parser.add_argument('--past', default=14,type=int)
+    parser.add_argument('--past', default=26,type=int)
     args = parser.parse_args()
     
     # load dataset

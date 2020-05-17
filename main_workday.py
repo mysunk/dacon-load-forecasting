@@ -114,6 +114,9 @@ for i in hourly_weather.columns[1:]:
     target[i+'_min'] = daily_weather.loc[:,i+'_h0':i+'_h23'].min(axis=1)
     target[i+'_mean'] = daily_weather.loc[:,i+'_h0':i+'_h23'].mean(axis=1)
     # target[i+'_std'] = daily_weather.loc[:,i+'_h0':i+'_h23'].std(axis=1)
+#%% target 저장
+# target.to_csv('data/target.csv',index = False)
+
 #%% 28일간 예측
 submission = pd.read_csv('data_raw/sample_submission.csv')
 submission_bottom_half = submission.loc[28:,:]
@@ -127,84 +130,125 @@ test['dayofweek'] = test['date'].dt.dayofweek
 # test = pd.concat([test, temp_pred],axis=1).copy() # DFT로 예측한 temp값
 
 
-#%% 같은요일끼리 묶기 -- supply val loss 보기
+#%% w/n으로 나누기 -- loss보기
 # x_columns, y_column =  target.columns[4:], 'supply'
-# past = 5-1 # n주 전 같은 요일 
-# val_num = 28
-# targets = []
-# losses = []
+# past_w = 9-1 # 5개전
+# past_n = 26-1 # 2개전
+
+# val_num_w = 28
+# val_num_n = 28
+
+# losses_w = []
+# losses_n = []
 # # param = {
 # #     'metric': 'l1',
 # #     'seed':777
 # #     }
 
-# trials = load_obj('0515_day/supply_4')
+# workday = [0,1,2,3,4]
+# trials = load_obj('0517_com/w')
 # param = trials[0]['params']
 
-# for j in range(2,6): # n주 뒤
-#     for i in range(7): # n요일
-#         target_sub = target.loc[target['dayofweek'] == i,:].copy().reset_index(drop=True)
-#         train_split = target_sub.shape[0]-past-j-val_num # 마지막 n개를 validation set으로 사용
-#         x_train, y_train = trans(target_sub, 0, train_split, past, j, x_columns, y_column)
-#         x_val, y_val = trans(target_sub, train_split, None, past, j, x_columns, y_column)
-#         y_train = np.ravel(y_train)
-#         y_val = np.ravel(y_val)
-#         d_train = lgb.Dataset(x_train,label=y_train)
-#         d_val = lgb.Dataset(x_val,label=y_val)
-#         model = lgb.train(param, train_set = d_train,  
-#                       valid_sets=[d_train, d_val],num_boost_round=1000,verbose_eval=False,
-#                               early_stopping_rounds=10)
-#         loss = model.best_score['valid_1']['l1']
-#         # losses[j-2,i] = loss
-#         losses.append(loss)
+# for j in range(5,25): # 20개
+#     # w
+#     target_sub = target.loc[target['dayofweek']%7<5 ,:].copy().reset_index(drop=True)
+#     train_split = target_sub.shape[0]-past_w-j-val_num_w # 마지막 n개를 validation set으로 사용
+#     x_train, y_train = trans(target_sub, 0, train_split, past_w, j, x_columns, y_column)
+#     x_val, y_val = trans(target_sub, train_split, None, past_w, j, x_columns, y_column)
+#     y_train = np.ravel(y_train)
+#     y_val = np.ravel(y_val)
+#     d_train = lgb.Dataset(x_train,label=y_train)
+#     d_val = lgb.Dataset(x_val,label=y_val)
+#     model = lgb.train(param, train_set = d_train,  
+#                   valid_sets=[d_train, d_val],num_boost_round=1000,verbose_eval=False,
+#                           early_stopping_rounds=10)
+#     loss = model.best_score['valid_1']['l1']
+#     losses_w.append(loss)
+
+# trials = load_obj('0517_com/nw')
+# param = trials[0]['params']
+# for j in range(1,9): # 8개
+#     # NW
+#     target_sub = target.loc[target['dayofweek']%7>=5,:].copy().reset_index(drop=True)
+#     train_split = target_sub.shape[0]-past_n-j-val_num_n # 마지막 n개를 validation set으로 사용
+#     x_train, y_train = trans(target_sub, 0, train_split, past_n, j, x_columns, y_column)
+#     x_val, y_val = trans(target_sub, train_split, None, past_n, j, x_columns, y_column)
+#     y_train = np.ravel(y_train)
+#     y_val = np.ravel(y_val)
+#     d_train = lgb.Dataset(x_train,label=y_train)
+#     d_val = lgb.Dataset(x_val,label=y_val)
+#     model = lgb.train(param, train_set = d_train,  
+#                   valid_sets=[d_train, d_val],num_boost_round=1000,verbose_eval=False,
+#                           early_stopping_rounds=10)
+#     loss = model.best_score['valid_1']['l1']
+#     losses_n.append(loss)
     
-#%% 같은요일끼리 묶기 -- supply 예측
+#%% w/n으로 나누기 -- supply 예측
 x_columns, y_column =  target.columns[4:], 'supply'
-past = 4-1 # n주 전 같은 요일 
-targets = []
-model_all = []
+target_sub_w = target.loc[target['dayofweek']%7<5 ,:].copy().reset_index(drop=True)
+target_sub_n = target.loc[target['dayofweek']%7<5 ,:].copy().reset_index(drop=True)
+
+past_w = 9-1 
+past_n = 26-1
+
+x_test_w = np.array(target_sub_w.loc[target_sub_w.shape[0]-past_w-1:, target_sub_w.columns[4:]])
+x_test_w = x_test_w.reshape(1,-1)
+
+
+x_test_n = np.array(target_sub_n.loc[target_sub_n.shape[0]-past_n-1:, target_sub_n.columns[4:]])
+x_test_n = x_test_n.reshape(1,-1)
+        
+
+preds_w = []
+preds_n = []
+
 # param = {
 #     'metric': 'l1',
 #     'seed':777
 #     }
-# model은 1주~6주 만들어놓음
-trials = load_obj('0515_day/supply_4')
+workday = [0,1,2,3,4]
+trials = load_obj('0517_com/w')
 param = trials[0]['params']
-param['random_state'] = 0
 
-# 학습
-for j in range(1,6): # n주 뒤
-    models = []
-    for i in range(7): # n요일
-        target_sub = target.loc[target['dayofweek'] == i,:].copy().reset_index(drop=True)
-        x_train, y_train = trans(target_sub, 0, None, past, j, x_columns, y_column)
-        y_train = np.ravel(y_train)
-        d_train = lgb.Dataset(x_train,label=y_train)
-        model = lgb.train(param, train_set = d_train,  
-                      valid_sets=[d_train],num_boost_round=1000,verbose_eval=False,
-                             early_stopping_rounds=10)
-        models.append(model)
-    model_all.append(models)
+for j in range(5,25): # 20개
+    # w
+    target_sub = target.loc[target['dayofweek']%7<5 ,:].copy().reset_index(drop=True)
+    x_train, y_train = trans(target_sub, 0, None, past_w, j, x_columns, y_column)
+    y_train = np.ravel(y_train)
+    d_train = lgb.Dataset(x_train,label=y_train)
+    model = lgb.train(param, train_set = d_train,  
+                  valid_sets=[d_train],num_boost_round=1000,verbose_eval=False,
+                         early_stopping_rounds=10)
+    preds_w.append(model.predict(x_test_w))
 
-# 예측
-a = np.arange(7)
-dom_val = target['dayofweek'].values[-1]
-dom_seq = np.concatenate((a[dom_val:],a[:dom_val]))
-preds = np.zeros((4,7))
-for iter_1, i in enumerate(dom_seq): # n요일
-    if iter_1 == 0: ranges = range(1,5)
-    else: ranges = range(2,6)
-    for iter_2,j in enumerate(ranges): # n주 뒤
-        # 예측 부분
-        target_sub = target.loc[target['dayofweek'] == i,:].copy().reset_index(drop=True)
-        x_test = np.array(target_sub.loc[target_sub.shape[0]-past-1:, target_sub.columns[4:]])
-        x_test = x_test.reshape(1,-1)
-        preds[iter_2,iter_1] = model_all[iter_2][i].predict(x_test)
-        
-preds = np.ravel(preds)
-test[y_column] = preds
+trials = load_obj('0517_com/nw')
+param = trials[0]['params']
+for j in range(1,9): # 8개
+    # NW
+    target_sub = target.loc[target['dayofweek']%7>=5,:].copy().reset_index(drop=True)
+    x_train, y_train = trans(target_sub, 0, None, past_n, j, x_columns, y_column)
+    y_train = np.ravel(y_train)
+    d_train = lgb.Dataset(x_train,label=y_train)
+    model = lgb.train(param, train_set = d_train,  
+                  valid_sets=[d_train],num_boost_round=1000,verbose_eval=False,
+                         early_stopping_rounds=10)
+    preds_n.append(model.predict(x_test_n))
 
-#%% 온도 예측 -- loss
+preds_w = np.ravel(preds_w)
+preds_n = np.ravel(preds_n)
+y_pred = []
+count_w, count_n = 0,0
+for i in range(4,32):
+    if i%7 <5:
+        y_pred.append(preds_w[count_w])
+        count_w = count_w+1
+    else:
+        y_pred.append(preds_n[count_n])
+        count_n = count_n+1
+
+test['supply'] = y_pred
+
+#%% 온도 예측 -- loss 보기
 # past = 30
 # past = past -1
 
@@ -315,4 +359,4 @@ for j,y_column in enumerate(y_columns):
 #%% 최종 제출
 submission.loc[:, ['smp_min', 'smp_max', 'smp_mean', 'supply']] = test.loc[:,['smp_min', 'smp_max', 'smp_mean', 'supply']]
 submission = pd.concat([submission, submission_bottom_half], axis = 0)
-# submission.to_csv('submit/submit_14_day.csv', index=False)
+submission.to_csv('submit/submit_15_wnw.csv', index=False)

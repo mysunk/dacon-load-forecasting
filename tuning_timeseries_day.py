@@ -39,15 +39,15 @@ class Tuning_model(object):
         self.space = {
             'learning_rate':            hp.uniform('learning_rate',    0.01, 0.1),
             'max_depth':                -1,
-            'num_leaves':               hp.quniform('num_leaves',       5, 100, 1), 
-            'min_data_in_leaf':		    hp.quniform('min_data_in_leaf',	10, 100, 1),	# overfitting 안되려면 높은 값
-            'reg_alpha':                hp.uniform('reg_alpha',0,0.5),
-            'reg_lambda':               hp.uniform('reg_lambda',0, 0.5),
-            'colsample_bytree':         hp.uniform('colsample_bytree', 0.8, 1.0),
-            'colsample_bynode':		    hp.uniform('colsample_bynode',0.8,1.0),
+            'num_leaves':               hp.quniform('num_leaves',       5, 200, 1), 
+            'min_data_in_leaf':		    hp.quniform('min_data_in_leaf',	10, 200, 1),	# overfitting 안되려면 높은 값
+            'reg_alpha':                hp.uniform('reg_alpha',0,1),
+            'reg_lambda':               hp.uniform('reg_lambda',0, 1),
+            'colsample_bytree':         hp.uniform('colsample_bytree', 0, 1.0),
+            'colsample_bynode':		    hp.uniform('colsample_bynode',0,1.0),
             'bagging_freq':			    hp.quniform('bagging_freq',	1,20,1),
             'tree_learner':			    hp.choice('tree_learner',	['serial','feature','data','voting']),
-            'subsample':                hp.uniform('subsample', 0.8, 1.0),
+            'subsample':                hp.uniform('subsample', 0, 1.0),
             'boosting':			        hp.choice('boosting', ['gbdt']),
             'max_bin':			        hp.quniform('max_bin',		100,300,1), # overfitting 안되려면 낮은 값
             "min_sum_hessian_in_leaf": hp.uniform('min_sum_hessian_in_leaf',       0, 0.1), 
@@ -74,9 +74,16 @@ class Tuning_model(object):
         past = past-1
         params = make_param_int(params, ['max_depth','num_leaves','min_data_in_leaf',
                                      'bagging_freq','max_bin'])
-
+        # params = {
+        #     'metric': 'mae',
+        #     'seed':777
+        #     }
+        
+        trials = load_obj('0515_day/supply_6')
+        params = trials[0]['params']
+        
         losses = []
-        val_num = 20
+        val_num = 28
         for j in range(2,6): # n주 뒤
             for i in range(7): # n요일
                 target_sub = train_set.loc[train_set['dayofweek'] == i,:].copy()
@@ -101,9 +108,9 @@ if __name__ == '__main__':
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--method', default='lgb', choices=['lgb', 'eln', 'rf','svr'])
     parser.add_argument('--max_evals', default=100,type=int)
-    parser.add_argument('--save_file', default='0515_2/supply')
+    parser.add_argument('--save_file', default='tmp')
     parser.add_argument('--label', default='supply')
-    parser.add_argument('--past', default=5,type=int)
+    parser.add_argument('--past', default=4,type=int)
     args = parser.parse_args()
     
     # load dataset

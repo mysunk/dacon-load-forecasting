@@ -9,6 +9,7 @@ from statsmodels.tsa.seasonal import seasonal_decompose
 from statsmodels.tsa.arima_model import ARIMA, ARMA
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 import pandas as pd
+from util import *
 #%% SMP 분석
 # hourly 데이터
 tmp = np.reshape(hourly_smp.smp.values,[-1,24])
@@ -142,3 +143,34 @@ plt.plot(test['date'],test['smp_mean'])
 plt.plot(target['temp_mean'])
 plt.plot(temp_filtered)
 plt.plot(temp_pred['temp_mean'])
+
+#%% base
+trials = load_obj('0515_base/supply_21')
+trials = load_obj('0515_base/supply_28')
+trials = load_obj('0515_base/supply_35')
+#%% day
+trials = load_obj('0515_day/supply_4')
+trials = load_obj('0515_day/supply_5')
+trials = load_obj('0515_day/supply_6')
+#%% w
+trials = load_obj('0515_nonworkday/supply_4')
+trials = load_obj('0515_nonworkday/supply_8')
+trials = load_obj('0515_nonworkday/supply_12')
+#%% n/w
+trials = load_obj('0515_workday/supply_5')
+trials = load_obj('0515_workday/supply_10')
+trials = load_obj('0515_workday/supply_15')
+
+#%%
+plt.plot(target['temp_max'], target['supply'],'.')
+
+#%%
+trials = load_obj('0516/smp_max')
+trials = load_obj('0516/smp_min')
+trials = load_obj('0516/smp_mean')
+
+trials = load_obj('0513/result1_temp_min')
+
+#%%
+trials = load_obj('0516_base/supply_28') # 4.87
+trials = load_obj('0516_workday/supply_28') # 5.21

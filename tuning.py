@@ -61,24 +61,24 @@ class Tuning_model(object):
             'epsilon':                  hp.uniform('epsilon',0,0.9),
             }
         
+    # parameter setting
     def lgb_space(self):
         # LightGBM parameters
         self.space = {
-            'learning_rate':            hp.uniform('learning_rate',    0.001, 0.1),
+            'learning_rate':            hp.uniform('learning_rate',    0.01, 0.1),
             'max_depth':                -1,
-            'num_leaves':               hp.quniform('num_leaves',       5, 300, 1), 
-            'min_data_in_leaf':		    hp.quniform('min_data_in_leaf',	50, 300, 1),	# overfitting 안되려면 높은 값
+            'num_leaves':               hp.quniform('num_leaves',       5, 200, 1), 
+            'min_data_in_leaf':		    hp.quniform('min_data_in_leaf',	10, 200, 1),	# overfitting 안되려면 높은 값
             'reg_alpha':                hp.uniform('reg_alpha',0,1),
             'reg_lambda':               hp.uniform('reg_lambda',0, 1),
-            'min_child_weight':         hp.quniform('min_child_weight', 1, 30, 1),
-            'colsample_bytree':         hp.uniform('colsample_bytree', 0.01, 1.0),
-            'colsample_bynode':		    hp.uniform('colsample_bynode',0.01,1.0),
+            'colsample_bytree':         hp.uniform('colsample_bytree', 0, 1.0),
+            'colsample_bynode':		    hp.uniform('colsample_bynode',0,1.0),
             'bagging_freq':			    hp.quniform('bagging_freq',	1,20,1),
             'tree_learner':			    hp.choice('tree_learner',	['serial','feature','data','voting']),
-            'subsample':                hp.uniform('subsample', 0.01, 1.0),
-            'boosting':			        hp.choice('boosting', ['gbdt','rf']),
-            'max_bin':			        hp.quniform('max_bin',		3,50,1), # overfitting 안되려면 낮은 값
-            "min_sum_hessian_in_leaf": hp.quniform('min_sum_hessian_in_leaf',       5, 15, 1), 
+            'subsample':                hp.uniform('subsample', 0, 1.0),
+            'boosting':			        hp.choice('boosting', ['gbdt']),
+            'max_bin':			        hp.quniform('max_bin',		100,300,1), # overfitting 안되려면 낮은 값
+            "min_sum_hessian_in_leaf": hp.uniform('min_sum_hessian_in_leaf',       0, 0.1), 
             'random_state':             self.random_state,
             'n_jobs':                   -1,
             'metrics':                  'l2'
@@ -149,6 +149,9 @@ class Tuning_model(object):
             'metric': 'mse',
             'seed':777
             }
+        # trials = load_obj('0515/smp_mean')
+        # param = trials[0]['params']
+        
         train = train_set[0]
         train_label = train_set[1]
         losses = []
@@ -167,7 +170,7 @@ class Tuning_model(object):
             dtrain = lgb.Dataset(x_train, label=y_train)
             dvalid = lgb.Dataset(x_test, label=y_test)
             model = lgb.train(params, train_set = dtrain,  
-                              valid_sets=[dtrain, dvalid],num_boost_round=1000,verbose_eval=True,
+                              valid_sets=[dtrain, dvalid],num_boost_round=1000,verbose_eval=False,
                                      early_stopping_rounds=10)
             losses.append(model.best_score['valid_1']['l2'])
         return {'loss': np.mean(losses,axis=0),'params':params ,'status': STATUS_OK}
@@ -178,16 +181,17 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Dacon load regression',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--method', default='lgb', choices=['lgb', 'eln', 'rf','svr'])
-    parser.add_argument('--max_evals', default=300,type=int)
-    parser.add_argument('--save_file', default='result1_smp_mean')
+    parser.add_argument('--max_evals', default=10,type=int)
+    parser.add_argument('--save_file', default='tmp')
     parser.add_argument('--nfold', default=5,type=int)
+    parser.add_argument('--label', default='smp_mean')
     args = parser.parse_args()
     
     # load dataset
     target = pd.read_csv('data/target_year_included.csv')
     # target.drop(columns=['month','day','dayofweek'])
     train = target.loc[:,'supply':].values
-    train_label = target.loc[:,'smp_mean'].values
+    train_label = target.loc[:,args.label].values
     
     # main
     clf = args.method

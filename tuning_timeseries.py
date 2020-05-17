@@ -39,15 +39,15 @@ class Tuning_model(object):
         self.space = {
             'learning_rate':            hp.uniform('learning_rate',    0.01, 0.1),
             'max_depth':                -1,
-            'num_leaves':               hp.quniform('num_leaves',       5, 100, 1), 
-            'min_data_in_leaf':		    hp.quniform('min_data_in_leaf',	10, 100, 1),	# overfitting 안되려면 높은 값
-            'reg_alpha':                hp.uniform('reg_alpha',0,0.5),
-            'reg_lambda':               hp.uniform('reg_lambda',0, 0.5),
-            'colsample_bytree':         hp.uniform('colsample_bytree', 0.8, 1.0),
-            'colsample_bynode':		    hp.uniform('colsample_bynode',0.8,1.0),
+            'num_leaves':               hp.quniform('num_leaves',       5, 200, 1), 
+            'min_data_in_leaf':		    hp.quniform('min_data_in_leaf',	10, 200, 1),	# overfitting 안되려면 높은 값
+            'reg_alpha':                hp.uniform('reg_alpha',0,1),
+            'reg_lambda':               hp.uniform('reg_lambda',0, 1),
+            'colsample_bytree':         hp.uniform('colsample_bytree', 0, 1.0),
+            'colsample_bynode':		    hp.uniform('colsample_bynode',0,1.0),
             'bagging_freq':			    hp.quniform('bagging_freq',	1,20,1),
             'tree_learner':			    hp.choice('tree_learner',	['serial','feature','data','voting']),
-            'subsample':                hp.uniform('subsample', 0.8, 1.0),
+            'subsample':                hp.uniform('subsample', 0, 1.0),
             'boosting':			        hp.choice('boosting', ['gbdt']),
             'max_bin':			        hp.quniform('max_bin',		100,300,1), # overfitting 안되려면 낮은 값
             "min_sum_hessian_in_leaf": hp.uniform('min_sum_hessian_in_leaf',       0, 0.1), 
@@ -73,10 +73,18 @@ class Tuning_model(object):
     def lgb_val(self, params, train_set, past): 
         params = make_param_int(params, ['max_depth','num_leaves','min_data_in_leaf',
                                      'bagging_freq','max_bin'])
+        past = past - 1
+        
+        # params = {
+        #     'metric': 'mae',
+        #     'seed':777
+        #     }
+        trials = load_obj('0513/result1_supply')
+        params = trials[0]['params']
         
         losses = []
         for future in range(7, 35):
-            train_split = train_set.shape[0]-past-future-30 # 마지막 30일을 validation set으로 사용
+            train_split = train_set.shape[0]-past-future-28 # 마지막 30일을 validation set으로 사용
             x_train, y_train = trans(train_set, 0, train_split, past, future, x_columns, y_columns)
             x_val, y_val = trans(train_set, train_split, None, past, future, x_columns, y_columns)
             y_train = np.ravel(y_train)
@@ -84,7 +92,7 @@ class Tuning_model(object):
             d_train = lgb.Dataset(x_train,label=y_train)
             d_val = lgb.Dataset(x_val,label=y_val)
             model = lgb.train(params, train_set = d_train,  
-                          valid_sets=[d_train, d_val],num_boost_round=1000,verbose_eval=True,
+                          valid_sets=[d_train, d_val],num_boost_round=1000,verbose_eval=False,
                                  early_stopping_rounds=10)
             loss = model.best_score['valid_1']['l1']
             losses.append(loss)
@@ -97,14 +105,15 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Dacon temperature regression',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--method', default='lgb', choices=['lgb', 'eln', 'rf','svr'])
-    parser.add_argument('--max_evals', default=300,type=int)
-    parser.add_argument('--save_file', default='result1_temp_mean')
-    parser.add_argument('--past', default=30,type=int)
+    parser.add_argument('--max_evals', default=10,type=int)
+    parser.add_argument('--save_file', default='tmp')
+    parser.add_argument('--past', default=28,type=int)
+    parser.add_argument('--label', default='supply')
     args = parser.parse_args()
     
     # load dataset
     target = pd.read_csv('data/target.csv')
-    label = args.save_file[8:]
+    label = args.label
     x_columns, y_columns =  target.columns[4:], [label]
     
     # main
