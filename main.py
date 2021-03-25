@@ -13,8 +13,9 @@ import matplotlib.pyplot as plt
 import lightgbm as lgb
 from sklearn.metrics import mean_absolute_error
 from util import *
+from functools import partial
 
-weather = pd.read_csv('data_raw/weather_v1.csv', low_memory=False, dtype={
+weather = pd.read_csv('data_raw/weather_v2.csv', low_memory=False, dtype={
     'area': str,
     'temp_QCFlag': str,
     'prec_QCFlag': str,
@@ -26,8 +27,8 @@ weather = pd.read_csv('data_raw/weather_v1.csv', low_memory=False, dtype={
     'suntime_QCFlag': str,
     'sfctemp_QCFlag': str,
 })
-hourly_smp = pd.read_csv('data_raw/hourly_smp_v1.csv')
-target = pd.read_csv('data_raw/target_v1.csv')
+hourly_smp = pd.read_csv('data_raw/hourly_smp_v2.csv')
+target = pd.read_csv('data_raw/target_v2.csv')
 
 target['date'] = pd.to_datetime(target['date'])
 target['year'] = target['date'].dt.year
@@ -117,9 +118,9 @@ for i in hourly_weather.columns[1:]:
 
 
 #%% target 저장
-target.to_csv('data/target.csv',index=False)
+# target.to_csv('data/target.csv',index=False)
 # target.to_csv('data/target_year_included.csv',index=False)
-
+target = pd.read_csv('data/target.csv')
 #%% 28일간 예측
 past = 28
 past = past -1
@@ -177,13 +178,14 @@ x_test = x_test.reshape(1,-1)
 #     print(f'for {random_state}, {np.mean(losses, axis=0)}')
         
     
-#%% 온도만으로 전력수급 예측하기 -- lgb, time series -- 예측용
+#%% supply 예측
 x_columns, y_columns =  target.columns[4:], ['supply','temp_mean', 'temp_min','temp_max']
 for i, y_column in enumerate(y_columns):
     pred_all = []
-    for random_state in range(10):
+    for random_state in [0]:
         trials = load_obj('0513/result1_'+y_column)
         param = trials[0]['params']
+
         # param = {
         # 'metric': 'l1',
         # 'seed':777
@@ -192,11 +194,15 @@ for i, y_column in enumerate(y_columns):
         param['random_state'] = random_state
         # model 만들기
         for future in range(7, 35):
-            x_train, y_train = trans(target, 0, None, past, future, x_columns, y_column)
+            train_split = target.shape[0]-past-future-30 # 마지막 30일을 validation set으로 사용
+            x_train, y_train = trans(target, 0, train_split, past, future, x_columns, y_column)
+            x_val, y_val = trans(target, train_split, None, past, future, x_columns, y_column)
             y_train = np.ravel(y_train)
+            y_val = np.ravel(y_val)
             d_train = lgb.Dataset(x_train,label=y_train)
+            d_val = lgb.Dataset(x_val,label=y_val)
             model = lgb.train(param, train_set = d_train,  
-                          valid_sets=[d_train],num_boost_round=1000,verbose_eval=False,
+                          valid_sets=[d_train, d_val],num_boost_round=1000,verbose_eval=False,
                                   early_stopping_rounds=10)
             models.append(model)
         
@@ -212,19 +218,23 @@ train = target.loc[:,'supply':]
 y_columns = ['smp_max','smp_min','smp_mean']
 test_x = test.loc[:,'supply':]
 
-params = {
-    'metric': 'mse',
-    'seed':777
-    }
-
-nfolds = 10
+nfolds = 5
 losses = np.zeros((nfolds,len(y_columns)))
-random_states = range(10)
+random_states = [0]
 for j,y_column in enumerate(y_columns):
     pred_all = []
     for state in random_states:
+        # trials = load_obj('0517/'+y_column)
         # trials = load_obj('0515/'+y_column)
         # params = trials[0]['params']
+        
+        params = {
+            'seed':777,
+            'metric':'mse'
+        }
+        params['random_state']=state
+        # params['metric']='None'
+
         train_label = target.loc[:,y_column]
         preds = []
         kf = KFold(n_splits=nfolds,random_state=None, shuffle=True)
@@ -236,10 +246,16 @@ for j,y_column in enumerate(y_columns):
             
             dtrain = lgb.Dataset(x_train, label=y_train)
             dvalid = lgb.Dataset(x_test, label=y_test)
+            # rmmse_obj = partial(rmsse_lgb, y_hist = train_label)
+            # model = lgb.train(params, train_set = dtrain,  
+            #                   valid_sets=[dtrain, dvalid],num_boost_round=1000,verbose_eval=True,feval=rmmse_obj,
+            #                           early_stopping_rounds=10)
+            # loss = model.best_score['valid_1']['rmsse_modified']
             model = lgb.train(params, train_set = dtrain,  
                               valid_sets=[dtrain, dvalid],num_boost_round=1000,verbose_eval=False,
-                                     early_stopping_rounds=10)
+                                      early_stopping_rounds=10)
             loss = model.best_score['valid_1']['l2']
+            
             losses[i,j] = loss
             
             pred = model.predict(test_x)
@@ -251,4 +267,4 @@ for j,y_column in enumerate(y_columns):
 #%% 최종 제출
 submission.loc[:, ['smp_min', 'smp_max', 'smp_mean', 'supply']] = test.loc[:,['smp_min', 'smp_max', 'smp_mean', 'supply']]
 submission = pd.concat([submission, submission_bottom_half], axis = 0)
-submission.to_csv('submit/submit_17.csv', index=False)
+submission.to_csv('submit/tmp.csv', index=False)
